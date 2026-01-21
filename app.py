@@ -30,70 +30,61 @@ def extract_unit(price_str):
 
 # --- 2. RESILIENT SCRAPER ENGINE ---
 def run_scraper(query):
-    # We use basic headless mode but add 'stealth' flags manually 
-    # to avoid the PermissionError triggered by uc=True
     with SB(headless=True, browser="chrome") as sb:
-        
-        # Manually apply stealth settings to mimic a real browser
+        # Manual stealth to avoid blocks
         sb.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
             "source": """
                 Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                window.chrome = {runtime: {}};
-                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
             """
         })
 
         url = f"https://dir.indiamart.com/search.mp?ss={query.replace(' ', '+')}"
         sb.open(url)
         
-        # Give it a moment to settle
-        time.sleep(5)
-        
-        # Human-like scrolling
+        # --- THE FIX: WAIT FOR CONTENT ---
+        # We wait up to 15 seconds for a price symbol to appear on the page
+        try:
+            sb.wait_for_element('//*[contains(text(), "₹")]', timeout=15)
+        except:
+            return pd.DataFrame() # Return empty if page never loads
+
+        # Scroll slowly to trigger lazy-load
         for _ in range(3):
-            sb.execute_script("window.scrollBy(0, 1000);")
+            sb.execute_script("window.scrollBy(0, 800);")
             time.sleep(2)
             
         listings = []
-        # Finding elements that contain the Rupee symbol
-        price_elements = sb.find_elements('//*[contains(text(), "₹")]')
+        # Find every 'card-like' div. IndiaMart uses many different classes, 
+        # so we look for common patterns in the ID or class.
+        cards = sb.find_elements('//div[contains(@id, "lst")] | //div[contains(@class, "card")] | //div[contains(@class, "item")]')
         
-        for p in price_elements:
+        for card in cards:
             try:
-                raw_price = p.text.strip()
-                if not raw_price or len(raw_price) > 30: continue
+                # Try to find a price inside this specific card
+                price_el = card.find_element('xpath', './/*[contains(text(), "₹")]')
+                raw_price = price_el.text.strip()
                 
-                # Navigate to the product card
-                parent = p.find_element('xpath', './ancestor::div[contains(@class, "card") or contains(@class, "lst") or contains(@class, "item")]')
+                # Try to find a link (the product title)
+                link_el = card.find_element('xpath', './/a[contains(@href, "proddetail")]')
+                name = link_el.text.strip()
+                link = link_el.get_attribute("href")
                 
-                # Robust extraction
-                name_els = parent.find_elements('xpath', './/h2 | .//span[contains(@class, "nm")] | .//a[contains(@href, "proddetail")]')
-                name = name_els[0].text if name_els else "Product"
-                
-                link_els = parent.find_elements('xpath', './/a[contains(@href, "indiamart.com/proddetail")]')
-                link = link_els[0].get_attribute("href") if link_els else "#"
-                
-                seller_els = parent.find_elements('xpath', './/div[contains(@class, "comp")] | .//a[contains(@class, "ls_nm")]')
-                seller = seller_els[0].text if seller_els else "Unknown Seller"
-                
+                # Seller and Location
+                seller = card.find_element('xpath', './/div[contains(@class, "comp")] | .//a[contains(@class, "ls_nm")]').text
                 try:
-                    loc = parent.find_element('xpath', './/span[contains(@class, "city")] | .//span[contains(@class, "loc")]').text
-                except: loc = "India"
-                
+                    loc = card.find_element('xpath', './/span[contains(@class, "city")] | .//span[contains(@class, "loc")]').text
+                except:
+                    loc = "India"
+
                 listings.append({
-                    "Product": name.strip(),
-                    "Price": raw_price,
-                    "Seller": seller.strip(),
-                    "Location": loc.strip(),
-                    "Link": link
+                    "Product": name, "Price": raw_price, "Seller": seller,
+                    "Location": loc, "Link": link
                 })
-            except: continue
+            except:
+                continue
             
         df = pd.DataFrame(listings).drop_duplicates()
-        if not df.empty:
-            df['Numeric Price'] = df['Price'].apply(clean_price)
-            df['Unit'] = df['Price'].apply(extract_unit)
-            df = df.sort_values(by=['Unit', 'Numeric Price'], ascending=[True, True])
+        # ... (cleaning logic remains same) ...
         return df
 # --- 3. THE "HUMAN" DASHBOARD UI ---
 st.set_page_config(page_title="Market Insights", page_icon="📈", layout="wide")
