@@ -30,68 +30,71 @@ def extract_unit(price_str):
 
 # --- 2. RESILIENT SCRAPER ENGINE ---
 def run_scraper(query):
-    # 'uc=True' is our stealth mode
-    with SB(uc=True, headless=True, ad_block=True, driver_executable_path="/tmp/chromedriver") as sb:
+    # We use basic headless mode but add 'stealth' flags manually 
+    # to avoid the PermissionError triggered by uc=True
+    with SB(headless=True, browser="chrome") as sb:
         
-        # Mimic a real person's browser signature
-        sb.driver.execute_cdp_cmd("Network.setUserAgentOverride", {
-            "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        # Manually apply stealth settings to mimic a real browser
+        sb.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+            "source": """
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                window.chrome = {runtime: {}};
+                Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+            """
         })
+
+        url = f"https://dir.indiamart.com/search.mp?ss={query.replace(' ', '+')}"
+        sb.open(url)
         
-        search_url = f"https://dir.indiamart.com/search.mp?ss={query.replace(' ', '+')}"
-        sb.uc_open_with_reconnect(search_url, reconnect_time=7)
+        # Give it a moment to settle
+        time.sleep(5)
         
-        # Human-like scrolling behavior
-        for _ in range(random.randint(3, 5)):
-            sb.execute_script(f"window.scrollBy(0, {random.randint(700, 1100)});")
-            time.sleep(random.uniform(1.0, 2.5))
+        # Human-like scrolling
+        for _ in range(3):
+            sb.execute_script("window.scrollBy(0, 1000);")
+            time.sleep(2)
             
         listings = []
-        # Finding elements that look like price tags
-        price_tags = sb.find_elements('//*[contains(text(), "₹")]')
+        # Finding elements that contain the Rupee symbol
+        price_elements = sb.find_elements('//*[contains(text(), "₹")]')
         
-        for p in price_tags:
+        for p in price_elements:
             try:
                 raw_price = p.text.strip()
-                if not raw_price or len(raw_price) > 25: # Filter out noise
-                    continue
+                if not raw_price or len(raw_price) > 30: continue
                 
-                # Pivot to the parent container to get full product context
-                container = p.find_element('xpath', './ancestor::div[contains(@class, "card") or contains(@class, "lst") or contains(@class, "item")]')
+                # Navigate to the product card
+                parent = p.find_element('xpath', './ancestor::div[contains(@class, "card") or contains(@class, "lst") or contains(@class, "item")]')
                 
-                # Extracting details with fallback names
-                name_el = container.find_elements('xpath', './/a[contains(@href, "proddetail")] | .//h2 | .//span[contains(@class, "nm")]')
-                product_name = name_el[0].text.strip() if name_el else "Unknown Product"
+                # Robust extraction
+                name_els = parent.find_elements('xpath', './/h2 | .//span[contains(@class, "nm")] | .//a[contains(@href, "proddetail")]')
+                name = name_els[0].text if name_els else "Product"
                 
-                link_el = container.find_elements('xpath', './/a[contains(@href, "indiamart.com/proddetail")]')
-                product_link = link_el[0].get_attribute("href") if link_el else "#"
+                link_els = parent.find_elements('xpath', './/a[contains(@href, "indiamart.com/proddetail")]')
+                link = link_els[0].get_attribute("href") if link_els else "#"
                 
-                seller_el = container.find_elements('xpath', './/div[contains(@class, "comp")] | .//a[contains(@class, "ls_nm")]')
-                seller_name = seller_el[0].text.strip() if seller_el else "Contact Seller"
+                seller_els = parent.find_elements('xpath', './/div[contains(@class, "comp")] | .//a[contains(@class, "ls_nm")]')
+                seller = seller_els[0].text if seller_els else "Unknown Seller"
                 
-                loc_el = container.find_elements('xpath', './/span[contains(@class, "city")] | .//span[contains(@class, "loc")]')
-                location = loc_el[0].text.strip() if loc_el else "India"
-
+                try:
+                    loc = parent.find_element('xpath', './/span[contains(@class, "city")] | .//span[contains(@class, "loc")]').text
+                except: loc = "India"
+                
                 listings.append({
-                    "Product": product_name,
+                    "Product": name.strip(),
                     "Price": raw_price,
-                    "Seller": seller_name,
-                    "Location": location,
-                    "Link": product_link
+                    "Seller": seller.strip(),
+                    "Location": loc.strip(),
+                    "Link": link
                 })
-            except Exception:
-                continue
+            except: continue
             
-        df = pd.DataFrame(listings).drop_duplicates(subset=['Product', 'Seller'])
-        
+        df = pd.DataFrame(listings).drop_duplicates()
         if not df.empty:
             df['Numeric Price'] = df['Price'].apply(clean_price)
             df['Unit'] = df['Price'].apply(extract_unit)
-            # Sort for better comparison logic
-            df = df.sort_values(by=['Unit', 'Numeric Price'], ascending=[True, True]).reset_index(drop=True)
-            
+            df = df.sort_values(by=['Unit', 'Numeric Price'], ascending=[True, True])
         return df
-
 # --- 3. THE "HUMAN" DASHBOARD UI ---
 st.set_page_config(page_title="Market Insights", page_icon="📈", layout="wide")
 

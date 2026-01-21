@@ -1,2 +1,5 @@
 chromium
+chromium-common
 chromium-driver
+libnss3
+libgconf-2-4
