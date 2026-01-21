@@ -1,0 +1,23 @@
+  File .py:198:SB
+--------------------------------------------------------------------
+Last Page: https://dir.indiamart.com/search.mp?ss=Flood+Road+Barrier+1000x500x400&v=4&mcatid=&catid=&crs=glb&trc=xium&cq=Meerut&tags=res:RC1-R7|ktp:N0|stype:attr=1|mtp:G|wc:4|lcf:0|cq:meerut|qr_nm:localhgmct-gl-gd|cs:20855|com-cf:nl|ptrs:na|mc:28308|cat:741|qry_typ:P|lang:en|tyr:2|qrd:260121|mrd:260121|prdt:260121|msf:hs|pfen:1|gli:U0G0I1|gc:Meerut|ic:Agra|scw:1|emt:0
+ Duration: 14.29s
+  Browser: Chrome 143.0.7499.193
+   Driver: chromedriver 143.0.7499.192
+Timestamp: 1768985956  (Unix Timestamp)
+     Date: Wednesday, 21 January 2026
+     Time: 2:29:16 PM  (IST, UTC+05:30)
+--------------------------------------------------------------------
+Traceback:
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/IPython/core/interactiveshell.py", line 3699, in run_code
+    exec(code_obj, self.user_global_ns, self.user_ns)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/folders/vq/zc5htxtx0hjc0fdf7lf08rf80000gn/T/ipykernel_52811/1923259540.py", line 38, in <module>
+    save_formatted_excel(df, "Dad_IndiaMart_Final_Report.xlsx")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/var/folders/vq/zc5htxtx0hjc0fdf7lf08rf80000gn/T/ipykernel_52811/1923259540.py", line 17, in save_formatted_excel
+    with pd.ExcelWriter(filename, engine='xlsxwriter') as writer:
+         ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/pandas/io/excel/_xlsxwriter.py", line 197, in __init__
+    from xlsxwriter import Workbook
+Exception: No module named 'xlsxwriter'
