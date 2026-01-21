@@ -21,9 +21,17 @@ def extract_unit(price_str):
 
 # --- 2. SCRAPER ENGINE ---
 def run_scraper(query):
-    with SB(uc=True, headless=True) as sb: 
+    # Use 'with' context to ensure the driver closes even if there's an error
+    with SB(uc=True, headless=True, ad_block=True) as sb:
+        # These flags are essential for Linux/Docker environments like Streamlit Cloud
+        sb.driver.execute_cdp_cmd("Network.setUserAgentOverride", {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        })
+        
         url = f"https://dir.indiamart.com/search.mp?ss={query.replace(' ', '+')}"
-        sb.uc_open_with_reconnect(url, reconnect_time=4)
+        sb.uc_open_with_reconnect(url, reconnect_time=5)
+        
+        # ... the rest of your scraping logic remains the same ...
         
         for _ in range(3):
             sb.execute_script("window.scrollBy(0, 1000);")
