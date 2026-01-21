@@ -19,43 +19,45 @@ def extract_unit(price_str):
         match = re.search(r'/\s*(\w+)', str(price_str))
         return match.group(1).strip().capitalize() if match else "Unit/Request"
     except: return "N/A"
-
-# --- 2. THE RE-ENGINEERED SCRAPER ---
+# 2 SCRAPPER ENGiNE
 def run_scraper(query):
-    # Removing the manual path to avoid the TypeError
-    # We use basic headless mode with broad-spectrum bypass flags
-    with SB(uc=True, headless=True, ad_block=True) as sb:
+    # We point the driver to /tmp to bypass the 'Permission Denied' error
+    # We use 'with' to ensure the driver is killed properly after the search
+    with SB(
+        uc=True, 
+        headless=True, 
+        ad_block=True,
+        driver_executable_path="/tmp/chromedriver" 
+    ) as sb:
+        
+        # Injecting a real User-Agent to further mask the cloud server
+        sb.driver.execute_cdp_cmd("Network.setUserAgentOverride", {
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+        })
+        
         url = f"https://dir.indiamart.com/search.mp?ss={query.replace(' ', '+')}"
         
-        # Open with a generous reconnect window
-        sb.uc_open_with_reconnect(url, reconnect_time=10)
+        # Give the cloud server extra time to handle the 'Undetected' handshake
+        sb.uc_open_with_reconnect(url, reconnect_time=7)
         
-        # Debugging: Save a screenshot if the page looks empty
-        if not sb.is_element_visible('body'):
-            sb.save_screenshot("empty_page.png")
-            return pd.DataFrame()
-
-        # Human-like scroll
+        # --- ROBUST EXTRACTION LOGIC ---
         for _ in range(3):
-            sb.execute_script("window.scrollBy(0, 800);")
-            time.sleep(2)
+            sb.execute_script("window.scrollBy(0, 1000);")
+            time.sleep(1.5)
             
         listings = []
-        # Find every product container using a more general XPath
+        # Find every product container using broad XPaths
         cards = sb.find_elements('//div[contains(@class, "card")] | //div[contains(@class, "lst")] | //div[contains(@class, "item")]')
         
         for card in cards:
             try:
-                # Find price using the Rupee symbol
                 price_el = card.find_element('xpath', './/*[contains(text(), "₹")]')
                 raw_price = price_el.text.strip()
                 
-                # Find product link and name
                 link_el = card.find_element('xpath', './/a[contains(@href, "indiamart.com/proddetail")]')
                 name = link_el.text.strip()
                 link = link_el.get_attribute("href")
                 
-                # Seller and Location
                 seller = card.find_element('xpath', './/div[contains(@class, "comp")] | .//a[contains(@class, "ls_nm")]').text
                 try:
                     loc = card.find_element('xpath', './/span[contains(@class, "city")] | .//span[contains(@class, "loc")]').text
@@ -71,9 +73,8 @@ def run_scraper(query):
         if not df.empty:
             df['Numeric Price'] = df['Price'].apply(clean_price)
             df['Unit'] = df['Price'].apply(extract_unit)
-            # Sort by Unit and then Price
             df = df.sort_values(by=['Unit', 'Numeric Price'], ascending=[True, True])
-        
+            
         return df
 
 # --- 3. STREAMLIT UI ---
